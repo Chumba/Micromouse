@@ -92,6 +92,46 @@ void solve(){
   
   char possible = possibles();
 
+  //testing Control Systems, temp code
+while(1){
+  forward(1);
+  turnRight();
+  forward(1);
+  turnRight();
+  forward(1);
+  turnLeft();
+  forward(1);
+  turnLeft();
+  forward(2);
+  turnLeft();
+  forward(1);
+  turnRight();
+  forward(1);
+  turnRight();
+  forward(1);
+  turnLeft();
+  forward(1);
+  turnLeft();
+  forward(1);
+  turnAround();
+  forward(1);
+  turnLeft();
+  forward(1);
+  turnLeft();
+  forward(2);
+  turnLeft();
+  forward(3);
+  turnAround();
+  waitBtn();
+}
+
+  // //end of test code
+//while(1){
+//  turnLeft();
+//  delay(200);
+//  turnRight();
+//  waitBtn();
+//}
   
   
   
@@ -143,18 +183,18 @@ void turnAround(){
 
 void turnRight(){
 
- move(390, -390, -150, 100); 
+ move(400, -400, -150, 100); 
 }
 
 void turnLeft(){
   
-  move(-372, 372, 100, -150);
+  move(-365, 365, 100, -115);
 }
 void forward(int cells){
   
   int dist = 0;
   
-  while(dist<130*cells){
+  while(dist<120*cells){
     
     dist = ((enc.getCountsM1() / 12) + (enc.getCountsM2() / 12))/2;
     int vR = analogRead(IRpinR);
@@ -193,8 +233,8 @@ void forward(int cells){
     }
 
        
-    int fixedR = map(errR, -128, 128, -20, 20);
-    int fixedL = map(errL, -128, 128, -20, 20);
+    int fixedR = map(errR, -128, 128, -30, 30);
+    int fixedL = map(errL, -128, 128, -30, 30);
    
     setMotors(speed-fixedR, speed-fixedL);
     
@@ -211,13 +251,13 @@ void setMotors(int speedR, int speedL){
   digitalWrite(directionPinL, lRev);
   delay(5);
   analogWrite(speedPinR, abs(speedR));
-  analogWrite(speedPinL, abs(speedL)-10);
+  analogWrite(speedPinL, abs(speedL-15)); //-20 here
 }
 
 void offReset(){
   analogWrite(speedPinR, 0);
   analogWrite(speedPinL, 0);
-  delay(500);
+  delay(200);
   enc.getCountsAndResetM1();
   enc.getCountsAndResetM2();
 
@@ -236,6 +276,7 @@ void waitBtn(){
           digitalWrite(13, HIGH);
           delay(150);
           digitalWrite(13,LOW);
+          delay(500);
           return;
         }
       }
