@@ -55,7 +55,6 @@ void setup() {
   if (DEBUG) Serial.begin(9600);  
   enc.init(encRA, encRB, encLA, encLB);
   pinMode(buttonPin, INPUT_PULLUP);
-
   // generate the maze values
   generateMaze();
   
@@ -80,19 +79,108 @@ void loop() {
 
 // This is the solving part of the maze, it discovers a path and returns home
 void solve(){
-  //array of 4 cells, each cell has {x, y, gravity, visits}
-  //the four cells are North, East, South, West respectively
-  int cells [4][4] = {
-      {posx,   posy-1, maze[posx]   [posy-1], visits[posx]  [posy-1]},
-      {posx+1, posy,   maze[posx+1] [posy],   visits[posx+1][posy]},
-      {posx,   posy+1, maze[posx]   [posy+1], visits[posx]  [posy+1]},
-      {posx-1, posy,   maze[posx-1] [posy],   visits[posx-1][posy]}
-    };
 
-  
-  char possible = possibles();
+  while(!isSolved()){
+    //array of 4 cells, each cell has {x, y, gravity, visits}
+    //the four cells are North, East, South, West respectively
+    int cells [4][4] = {
+        {posx,   posy-1, maze[posx]   [posy-1], visits[posx]  [posy-1]},
+        {posx+1, posy,   maze[posx+1] [posy],   visits[posx+1][posy]},
+        {posx,   posy+1, maze[posx]   [posy+1], visits[posx]  [posy+1]},
+        {posx-1, posy,   maze[posx-1] [posy],   visits[posx-1][posy]}
+      };
+   
+    boolean possibles[4] = {0,0,0,0};
+    getPossibles(possibles);
 
-  //testing Control Systems, temp code
+    //cant go anywhere but turn around
+    if(possibles[0]==0&&possibles[1]==0&&possibles[2]==0){
+      turnAround();
+      forward(1);
+    }
+    else{
+      //now we need to pick the possible cell with the lowest visit value
+      
+      //if there is a tie we pick the one with the lowest gravity
+
+      //if there is still a tie we favor forward, then right, then left. 
+      int weights [4]={0,0,0,0}; 
+     
+      // weights gets populated with visit values of each direction
+      // -1 means we cannot visit that location
+      for(int i=0; i<4; i++){
+        if (possibles[i]){
+          weights[i] = cells[i][3]; 
+        }
+        else weights[i] = -1;
+      }
+      if(getWeights(weights)){
+        //we figured out where we want to go
+        if(weights[0]!=-1){
+          goNorth();
+        }
+        if(weights[1]!=-1){
+          goEast();
+        }
+        if(weights[2]!=-1){
+          goSouth();
+        }
+        if(weights[3]!=-1){
+          goWest();
+        }        
+      }
+      else{
+        // still need to rule out destinations, this time based on the gravity values
+        for(int i=0; i<4; i++){
+          if (possibles[i]!=-1){
+            weights[i] = cells[i][4]; 
+          }
+          else weights[i] = -1;
+        }
+        
+        if(getWeights(weights)){
+          //the gravity check was enough to pick a best destination, we've figured out where to go
+          if(weights[0]!=-1){
+            goNorth();
+          }
+          if(weights[1]!=-1){
+            goEast();
+          }
+          if(weights[2]!=-1){
+            goSouth();
+          }
+          if(weights[3]!=-1){
+            goWest();
+          }                  
+        }
+        else{
+          //still need to narrow it down, we favor forward, then right, then left. 
+          //weights is still in NESW, we need to change it to LFR
+          if(weights[direction]!=-1){ //favor forward first
+            switch(direction){
+              case 0:
+                goNorth();
+                break;
+              case 1:
+                goEast();
+                break;
+              case 2:
+                goSouth();
+                break;
+              case 3:
+                goWest();
+                break;
+            }
+          //TODO pick another direction, right or left, i dont think this could ever happen tbh
+          }
+        }
+      }    
+    }
+    //we're at our destination, update visits
+    visits[posx][posy]++;
+  }
+
+  /*testing Control Systems, temp code
 while(1){
   forward(1);
   turnRight();
@@ -133,35 +221,180 @@ while(1){
 //  waitBtn();
 //}
   
-  
-  
+  */
+
 }
 
-char possibles(){
+void goNorth(){
+  switch(direction){
+    case 0:
+      forward(1);
+      break;
+    case 1:
+      turnLeft();
+      forward(1);
+      break;
+    case 2:
+      turnAround();
+      forward(1);
+      break;
+    case 3:
+      turnRight();
+      forward(1);
+      break;
+  }
+}
+
+void goEast(){
+  switch(direction){
+    case 0:
+      turnRight();
+      forward(1);
+      break;
+    case 1:
+      forward(1);
+      break;
+    case 2:
+      turnLeft();
+      forward(1);
+      break;
+    case 3:
+      turnAround();
+      forward(1);
+      break;
+  }
+}
+
+void goSouth(){
+  switch(direction){
+    case 0:
+      turnAround();
+      forward(1);
+      break;
+    case 1:
+      turnRight();
+      forward(1);
+      break;
+    case 2:
+      forward(1);
+      break;
+    case 3:
+      turnLeft();
+      forward(1);
+      break;
+  }
+}
+
+void goWest(){
+  switch(direction){
+    case 0:
+      turnLeft();
+      forward(1);
+      break;
+    case 1:
+      turnAround();
+      forward(1);
+      break;
+    case 2:
+      turnRight();
+      forward(1);
+      break;
+    case 3:
+      forward(1);
+      break;
+  }
+}
+
+//modifies weights to determine which has lowest values
+//examples (0,0,-1,3) would create (0,0,-1,-1)
+// 4,4,1,-1 would create -1,-1,1,-1
+// we also return true if there is only one value left that is not -1
+boolean getWeights(int weights []){
+  int min;
+  for(int i=0;i<4;i++){
+    if (weights[i]==-1){
+      //do nothing we already ruled this out
+    }
+    if (weights[i]<min) min = weights[i];
+  }
+  int count=0;
+  for(int i=0; i<4; i++){
+    if(weights[i]>min){
+      count++;
+      weights[i]=-1;
+    }
+  if (count=3) return true;
+  else return false;
+}
+}
+
+//determines if we are at a solved position (in the center of the maze
+boolean isSolved(){
+  if((posx == 7 || posx == 8)&&(posy == 7 || posy == 8)){
+    return true;
+  }
+  return false;
+}
+
+//modifies the array possibles to determine which cell i can move to next
+// north, east, south, west
+void getPossibles(boolean possibles[]){
   // check the walls to determine possible moves
   int vR = analogRead(IRpinR);
   int vF = analogRead(IRpinF);
   int vL = analogRead(IRpinL);
+
+  boolean poss[] = {0,0,0,0};
   
   bool left = vL > 200;
   bool front = vF > 200;
-  bool right = vL > 200;
-
-  char results = 0100;
+  bool right = vR > 200;
 
   if(!left){
     // no left wall
-    results = results + B1000;
+    poss[0] = 1;
   }
   if(!front){
     // no front wall
-    results = results + B0001;
+    poss[1] = 1;
   }
   if(!right){
     // no right wall
-    results = results + B0010;
+    poss[2] = 1;
   }
-  return results;
+
+  switch(direction){
+    // facing north  
+    case 0:
+      possibles[0] = poss[1];
+      possibles[1] = poss[2];
+      possibles[2] = 1;
+      possibles[3] = poss[0];
+      break;
+    // facing east
+    case 1:
+      possibles[0] = poss[0];
+      possibles[1] = poss[1];
+      possibles[2] = poss[2];
+      possibles[3] = 1;
+      break;
+    // facing south
+    case 2:
+      possibles[0] = 1;
+      possibles[1] = poss[0];
+      possibles[2] = poss[1];
+      possibles[3] = poss[2];
+      break;
+    //facing west
+    case 3:
+      possibles[0] = poss[2];
+      possibles[1] = 1;
+      possibles[2] = poss[0];
+      possibles[3] = poss[1];
+      break;
+    
+  }
+ 
 }
 
 // This is the speed run code, it knows a path and attempts to run the path as
@@ -170,6 +403,8 @@ void speedRun(){
   
 }
 
+//move the motors using encoders for distance measurement
+// distance right motor, distance left, speed right, speed left
 void move(int dR, int dL, int sR, int sL){
   while((abs(enc.getCountsM1()) < dR) or (abs(enc.getCountsM2()) < dL)){
     setMotors(sR,sL);
@@ -177,20 +412,69 @@ void move(int dR, int dL, int sR, int sL){
   offReset();
 }
 
+// turn the mouse around
+// also sets direction
 void turnAround(){
   move(915, -915, -150, 100);
+  if(direction==1){
+    direction=3;
+  }
+  else if(direction==2){
+    direction=4;
+  }
+  else if(direction==3){
+    direction=1;
+  }
+  else{
+    direction = 2;
+  }
 }
 
+// turn the mouse right
+// also sets direction
 void turnRight(){
 
  move(400, -400, -150, 100); 
+ if(direction==4){
+  direction=1;
+ }
+ else{
+  direction++;
+ }
 }
 
+// turn the mouse left
+// also sets direction
 void turnLeft(){
   
   move(-365, 365, 100, -115);
+  if(direction==1){
+  direction = 4;
+ }
+ else{
+  direction--;
+ }
 }
+
+//moves the mouse forward x cells
+//also sets the new position
+//TODO set visits for movements longer than 1 cell
 void forward(int cells){
+  //update positions
+   switch(direction){
+    case 1:
+      posy=posy-cells;
+      break;
+    case 2:
+      posx=posx+cells;
+      break;
+    case 3:
+      posy=posy+cells;
+      break;
+    case 4:
+      posx=posx-cells;
+      break;
+  }
   
   int dist = 0;
   
@@ -243,6 +527,7 @@ void forward(int cells){
   offReset();
 }
 
+//sets motors to speed right, speed left
 void setMotors(int speedR, int speedL){
   bool rRev = speedR>0;
   bool lRev = speedL>0;
@@ -254,6 +539,7 @@ void setMotors(int speedR, int speedL){
   analogWrite(speedPinL, abs(speedL-15)); //-20 here
 }
 
+//shuts off motors, resets encoder counts and waits for stop
 void offReset(){
   analogWrite(speedPinR, 0);
   analogWrite(speedPinL, 0);
@@ -263,6 +549,8 @@ void offReset(){
 
 }
 
+//waits for a button press
+//also accounts for debouncing
 void waitBtn(){
   while(1){
     bool reading = digitalRead(buttonPin);
@@ -285,6 +573,7 @@ void waitBtn(){
   }
 }
 
+//generate maze data needed for maze algorithms
 void generateMaze(){
   for(int i=0; i<size ; i++){
     for(int j=0; j<size ; j++){
@@ -306,6 +595,7 @@ void generateMaze(){
   }
 }
 
+//generates gravity maze values
 int gen(unsigned short row1, unsigned short col1){
   unsigned short nr;
   unsigned short nc;
