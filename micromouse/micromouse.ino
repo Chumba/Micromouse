@@ -31,6 +31,7 @@
 // Define constants
 #define mazeSize 16
 #define DEBUG 0
+#define DEBUG1 1
 
 //Button variables
 bool buttonState;
@@ -39,15 +40,15 @@ long lastDebounceTime = 0;
 long debounceDelay = 50;
 
 //Maze variables
-unsigned short maze [mazeSize] [mazeSize];
-unsigned short visits [mazeSize] [mazeSize];
+int maze [mazeSize] [mazeSize];
+int visits [mazeSize] [mazeSize];
 
 // location variables
 int posx = 0;
 int posy = 15;
 
-//direction: 1: North 2: East 3: South 4: West
-char direction = 1;
+//direction: 0: North 1: East 2: South 3: West
+char direction = 0;
 
 // Motor Speed variable
 int speed = 127;
@@ -66,7 +67,7 @@ LinkedList<action> actionSolution;
 PololuWheelEncoders enc;
 
 void setup() {
-  if (DEBUG) Serial.begin(9600);
+  if (DEBUG1) Serial.begin(9600);
   enc.init(encRA, encRB, encLA, encLB);
   pinMode(buttonPin, INPUT_PULLUP);
   // generate the maze values
@@ -107,9 +108,37 @@ void solve() {
       {posx - 1, posy,   maze[posx - 1] [posy],   visits[posx - 1][posy]}
     };
 
+    if(posx==0){
+      cells[3][0] = -1;
+      cells[3][2] = 17;
+      cells[3][3] = 999;
+    }
+    if(posx==15){
+      cells[1][0] = 16;
+      cells[1][2] = 17;
+      cells[1][3] = 999;
+    }
+    if(posy==0){
+      cells[0][1] = -1;
+      cells[0][2] = 17;
+      cells[0][3] = 999;
+    }
+    if(posy==15){
+      cells[2][1] = 16;
+      cells[2][2] = 17;
+      cells[2][3] = 999;
+    }
+
     boolean possibles[4] = {0, 0, 0, 0};
     getPossibles(possibles);
+    Serial.print("possibles: ");
+    Serial.print(possibles[0]);
+    Serial.print(possibles[1]);
+    Serial.print(possibles[2]);
+    Serial.println(possibles[3]);
 
+    
+    
     //now we need to pick the possible cell with the lowest visit value
 
     //if there is a tie we pick the one with the lowest gravity
@@ -125,7 +154,12 @@ void solve() {
       }
       else weights[i] = -1;
     }
-    if (getWeights(weights)) {
+    
+    
+    bool temp = getWeights(weights);
+    //printMazes();
+    //waitBtn();
+    if (temp) {
       //we figured out where we want to go
       if (weights[0] != -1) {
         goNorth();
@@ -144,11 +178,17 @@ void solve() {
       delay(5);
       // still need to rule out destinations, this time based on the gravity values
       for (int i = 0; i < 4; i++) {
-        if (possibles[i] != -1) {
-          weights[i] = cells[i][4];
+        if (weights[i] != -1) {
+          weights[i] = cells[i][2];
         }
         else weights[i] = -1;
       }
+    
+       Serial.print("weights before getweight gravity: ");
+    Serial.print(weights[0]);
+    Serial.print(weights[1]);
+    Serial.print(weights[2]);
+    Serial.println(weights[3]);
 
       if (getWeights(weights)) {
         //the gravity check was enough to pick a best destination, we've figured out where to go
@@ -259,6 +299,9 @@ void push(cell next){
 }
 
 void goNorth() {
+
+Serial.println("Going north");
+  
   switch (direction) {
     case 0:
       forward(1);
@@ -279,6 +322,7 @@ void goNorth() {
 }
 
 void goEast() {
+  Serial.println("Going east");
   switch (direction) {
     case 0:
       turnRight();
@@ -299,6 +343,7 @@ void goEast() {
 }
 
 void goSouth() {
+  Serial.println("Going south");
   switch (direction) {
     case 0:
       turnAround();
@@ -319,6 +364,7 @@ void goSouth() {
 }
 
 void goWest() {
+  Serial.println("Going west");
   switch (direction) {
     case 0:
       turnLeft();
@@ -461,7 +507,7 @@ void translate(){
 // 4,4,1,-1 would create -1,-1,1,-1
 // we also return true if there is only one value left that is not -1
 boolean getWeights(int weights []) {
-  int min;
+  int min=999;
   for (int i = 0; i < 4; i++) {
     if (weights[i] == -1) {
       //do nothing we already ruled this out
@@ -469,14 +515,21 @@ boolean getWeights(int weights []) {
     else if (weights[i] < min) min = weights[i];
   }
   //count counts the -1s
+  //set non minimums to -1
   int count = 0;
   for (int i = 0; i < 4; i++) {
     if (weights[i] > min) {
-      count++;
       weights[i] = -1;
     }
-    else if (weights[i] == -1) count++;
+    if (weights[i] == -1) count++;
   }
+
+  Serial.print("weights: ");
+    Serial.print(weights[0]);
+    Serial.print(weights[1]);
+    Serial.print(weights[2]);
+    Serial.println(weights[3]);
+  
   if (count == 3) return true;
   else return false;
 }
@@ -499,9 +552,9 @@ void getPossibles(boolean possibles[]) {
 
   boolean poss[] = {0, 0, 0, 0};
 
-  bool left = vL > 200;
-  bool front = vF > 200;
-  bool right = vR > 200;
+  bool left = vL > 240;
+  bool front = vF > 240;
+  bool right = vR > 240;
 
   if (!left) {
     // no left wall
@@ -514,6 +567,10 @@ void getPossibles(boolean possibles[]) {
   if (!right) {
     // no right wall
     poss[2] = 1;
+  }
+
+  if(poss[0]==0&&poss[1]==0&&poss[2]==0){
+    visits[posx][posy]=999;
   }
 
   switch (direction) {
@@ -568,18 +625,22 @@ void move(int dR, int dL, int sR, int sL) {
 // turn the mouse around
 // also sets direction
 void turnAround() {
-  move(915, -915, -150, 100);
-  if (direction == 1) {
-    direction = 3;
-  }
-  else if (direction == 2) {
-    direction = 4;
-  }
-  else if (direction == 3) {
-    direction = 1;
-  }
-  else {
-    direction = 2;
+  move(945, -945, -150, 100);
+  offReset();
+  move(-30, -30, -100, -100);
+  switch(direction){
+    case 0:
+      direction = 2;
+      break;
+    case 1:
+      direction = 3;
+      break;
+    case 2:
+      direction = 0;
+      break;
+    case 3:
+      direction = 1;
+      break;
   }
 }
 
@@ -588,8 +649,8 @@ void turnAround() {
 void turnRight() {
 
   move(400, -400, -150, 100);
-  if (direction == 4) {
-    direction = 1;
+  if (direction == 3) {
+    direction = 0;
   }
   else {
     direction++;
@@ -601,8 +662,8 @@ void turnRight() {
 void turnLeft() {
 
   move(-365, 365, 100, -115);
-  if (direction == 1) {
-    direction = 4;
+  if (direction == 0) {
+    direction = 3;
   }
   else {
     direction--;
@@ -615,16 +676,16 @@ void turnLeft() {
 void forward(int cells) {
   //update positions
   switch (direction) {
-    case 1:
+    case 0:
       posy = posy - cells;
       break;
-    case 2:
+    case 1:
       posx = posx + cells;
       break;
-    case 3:
+    case 2:
       posy = posy + cells;
       break;
-    case 4:
+    case 3:
       posx = posx - cells;
       break;
   }
@@ -740,7 +801,10 @@ void generateMaze() {
   if (DEBUG) Serial.println("-------------------");
   for (int i = 0; i < mazeSize ; i++) {
     for (int j = 0; j < mazeSize ; j++) {
-      visits[i][j] = 0;
+      if (i==0 && j==15){
+        visits[i][j] = 1;
+      }
+      else visits[i][j] = 0;
       if (DEBUG) Serial.print(visits[i][j]);
       if (DEBUG) Serial.print(", ");
     }
@@ -765,3 +829,29 @@ int gen(unsigned short row1, unsigned short col1) {
   }
   return (mazeSize - (col1) - (row1));
 }
+
+void printMazes(){
+  Serial.print("You are here: ");
+  Serial.print(posx);
+  Serial.print(" ");
+  Serial.println(posy);
+  Serial.println("Visits:");
+  for (int i = 0; i < mazeSize ; i++) {
+    for (int j = 0; j < mazeSize ; j++) {
+      Serial.print(maze[i][j]);
+      Serial.print(", ");
+    }
+    Serial.println();
+
+  }
+  Serial.println("-------------------");
+  Serial.println("Gravity");
+  for (int i = 0; i < mazeSize ; i++) {
+    for (int j = 0; j < mazeSize ; j++) {
+      Serial.print(visits[j][i]);
+      Serial.print(", ");
+    }
+    Serial.println();
+  }
+}
+
