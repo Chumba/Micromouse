@@ -30,8 +30,8 @@
 
 // Define constants
 #define mazeSize 16
-#define DEBUG 0
-#define DEBUG1 1
+#define DEBUG   0  //debugging for control systems
+#define DEBUG1  0  //debugging for algorithms
 
 //Button variables
 bool buttonState;
@@ -63,11 +63,13 @@ struct action{
   int cells; //only matters for forward, how many cells should I move
 };
 LinkedList<cell> cellSolution;
-LinkedList<action> actionSolution;
+LinkedList<action> actionSolutionToSolve;
+LinkedList<action> actionSolutionToHome;
+
 PololuWheelEncoders enc;
 
 void setup() {
-  if (DEBUG1) Serial.begin(9600);
+  if (DEBUG || DEBUG1) Serial.begin(9600);
   enc.init(encRA, encRB, encLA, encLB);
   pinMode(buttonPin, INPUT_PULLUP);
   // generate the maze values
@@ -79,20 +81,27 @@ void setup() {
   // wait for start signal
   waitBtn();
 
-  //solve the maze and return home
+  //solve the maze
   solve();
+  
+  // create the action solution for solving the maze
+  translateSolve();
+  
+  //create the action solution for returning to start
+  translateHome();
 }
 
 void loop() {
 
+  //start by going home
+  act(actionSolutionToHome);
+  
   // wait for start signal
   waitBtn();
 
-  //increase speed
-  speed = speed * .10;
-
-  //Speed run
-  speedRun();
+  //solve the maze with the optimized solution
+  act(actionSolutionToSolve);
+  delay(1000);
 }
 
 // This is the solving part of the maze, it discovers a path and returns home
@@ -131,11 +140,15 @@ void solve() {
 
     boolean possibles[4] = {0, 0, 0, 0};
     getPossibles(possibles);
-    Serial.print("possibles: ");
-    Serial.print(possibles[0]);
-    Serial.print(possibles[1]);
-    Serial.print(possibles[2]);
-    Serial.println(possibles[3]);
+    
+    if(DEBUG1) {
+      Serial.print("possibles: ");
+      Serial.print(possibles[0]);
+      Serial.print(possibles[1]);
+      Serial.print(possibles[2]);
+      Serial.println(possibles[3]);
+    }
+    
 
     
     
@@ -184,12 +197,13 @@ void solve() {
         else weights[i] = -1;
       }
     
-       Serial.print("weights before getweight gravity: ");
-    Serial.print(weights[0]);
-    Serial.print(weights[1]);
-    Serial.print(weights[2]);
-    Serial.println(weights[3]);
-
+      if(DEBUG1) {
+        Serial.print("weights before getweight gravity: ");
+        Serial.print(weights[0]);
+        Serial.print(weights[1]);
+        Serial.print(weights[2]);
+        Serial.println(weights[3]);
+      }
       if (getWeights(weights)) {
         //the gravity check was enough to pick a best destination, we've figured out where to go
         if (weights[0] != -1) {
@@ -234,51 +248,32 @@ void solve() {
     //we're at our destination, update visits
     visits[posx][posy]++;
   }
-
-  /*testing Control Systems, temp code
-    while(1){
-    forward(1);
-    turnRight();
-    forward(1);
-    turnRight();
-    forward(1);
-    turnLeft();
-    forward(1);
-    turnLeft();
-    forward(2);
-    turnLeft();
-    forward(1);
-    turnRight();
-    forward(1);
-    turnRight();
-    forward(1);
-    turnLeft();
-    forward(1);
-    turnLeft();
-    forward(1);
-    turnAround();
-    forward(1);
-    turnLeft();
-    forward(1);
-    turnLeft();
-    forward(2);
-    turnLeft();
-    forward(3);
-    turnAround();
-    waitBtn();
-    }
-
-    // //end of test code
-    //while(1){
-    //  turnLeft();
-    //  delay(200);
-    //  turnRight();
-    //  waitBtn();
-    //}
-
-  */
-
 }
+
+void act(solution){
+  //for each action in the solution, act based on the solution step
+  for(int i=0; i< solution.size(); i++){
+    //solution is a linked list of actions
+    //an action has act, and cells. 
+    //if act is 0, we need a cells value (number of cells to move forward)
+    //act values: 0=forward, 1 is turnleft, 2 is turnright, 3 is turnaround
+    switch(solution.act){
+      case 0:
+        forward(solution.cells);
+        break;
+      case 1:
+        turnLeft();
+        break;
+      case 2:
+        turnRight();
+        break;
+      case 3:
+        turnAround();
+        break;
+    }
+  }
+}
+
 // adds the next element of the cellSolution to the linked list
 // if that cell is already in the cellSolution, we can remove every
 // cell which follows the first instance, since we did a loop
@@ -300,7 +295,7 @@ void push(cell next){
 
 void goNorth() {
 
-Serial.println("Going north");
+  if(DEBUG1) Serial.println("Going north");
   
   switch (direction) {
     case 0:
@@ -322,7 +317,7 @@ Serial.println("Going north");
 }
 
 void goEast() {
-  Serial.println("Going east");
+  if(DEBUG1) Serial.println("Going east");
   switch (direction) {
     case 0:
       turnRight();
@@ -343,7 +338,7 @@ void goEast() {
 }
 
 void goSouth() {
-  Serial.println("Going south");
+  if(DEBUG1) Serial.println("Going south");
   switch (direction) {
     case 0:
       turnAround();
@@ -364,7 +359,7 @@ void goSouth() {
 }
 
 void goWest() {
-  Serial.println("Going west");
+  if(DEBUG1) Serial.println("Going west");
   switch (direction) {
     case 0:
       turnLeft();
@@ -385,7 +380,10 @@ void goWest() {
 }
 
 // this translates the cellSolution into a actionSolution
-void translate(){
+// cellSolution is the direction cell by cell
+// action solution is a solution in terms of movements
+// this version translates into a solution from home to solved
+void translateSolve(){
   int dir = 0;
   //loops through every node of cell solution
   for(int i = 0; i<cellSolution.size(); i++){
@@ -397,25 +395,25 @@ void translate(){
       case 0:
         if(current.y-next.y==1){
           //move forward
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({0,1});
           dir=0;
         }
         else if(current.y-next.y==-1){
           //turn around, then move forward
-          actionSolution.add({3,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({3,0});
+          actionSolutionToSolve.add({0,1});
           dir = 2;
         }
         else if(current.x-next.x==1){
           //turn right, then move forward
-          actionSolution.add({2,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({2,0});
+          actionSolutionToSolve.add({0,1});
           dir = 1;
         }
         else if(current.x-next.x==-1){
           //turn left, then move forward
-          actionSolution.add({1,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({1,0});
+          actionSolutionToSolve.add({0,1});
           dir = 3;
         }
         break;
@@ -423,25 +421,25 @@ void translate(){
        case 1:
        //go north
         if(current.y-next.y==1){
-          actionSolution.add({1,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({1,0});
+          actionSolutionToSolve.add({0,1});
           dir=0;
         }
         //go south
         else if(current.y-next.y==-1){
-          actionSolution.add({2,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({2,0});
+          actionSolutionToSolve.add({0,1});
           dir = 2;
         }
         //go east
         else if(current.x-next.x==1){
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({0,1});
           dir = 1;
         }
         //go west
         else if(current.x-next.x==-1){
-          actionSolution.add({3,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({3,0});
+          actionSolutionToSolve.add({0,1});
           dir = 3;
         }
         break;
@@ -449,26 +447,26 @@ void translate(){
        case 2:
        //go north
         if(current.y-next.y==1){
-          actionSolution.add({3,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({3,0});
+          actionSolutionToSolve.add({0,1});
           dir=0;
         }
         //go south
         else if(current.y-next.y==-1){
           
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({0,1});
           dir = 2;
         }
         //go east
         else if(current.x-next.x==1){
-          actionSolution.add({1,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({1,0});
+          actionSolutionToSolve.add({0,1});
           dir = 1;
         }
         //go west
         else if(current.x-next.x==-1){
-          actionSolution.add({2,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({2,0});
+          actionSolutionToSolve.add({0,1});
           dir = 3;
         }
         break; 
@@ -476,25 +474,143 @@ void translate(){
        case 3:
        //go north
         if(current.y-next.y==1){
-          actionSolution.add({2,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({2,0});
+          actionSolutionToSolve.add({0,1});
           dir=0;
         }
         //go south
         else if(current.y-next.y==-1){
-          actionSolution.add({1,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({1,0});
+          actionSolutionToSolve.add({0,1});
           dir = 2;
         }
         //go east
         else if(current.x-next.x==1){
-          actionSolution.add({3,0});
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({3,0});
+          actionSolutionToSolve.add({0,1});
           dir = 1;
         }
         //go west
         else if(current.x-next.x==-1){
-          actionSolution.add({0,1});
+          actionSolutionToSolve.add({0,1});
+          dir = 3;
+        }
+        break; 
+    }
+  }
+}
+
+void translateHome(){
+  int dir = 0;
+  //loops through every node of cell solution
+  // this version translates into a solution from solved to hom
+  for(int i = cellSolution.size(); i>0; i--){
+    cell current=cellSolution.get(i);
+    cell next = cellSolution.get(i-1);
+    
+    switch (dir){
+      
+      case 0:
+        if(current.y-next.y==1){
+          //move forward
+          actionSolutionToHome.add({0,1});
+          dir=0;
+        }
+        else if(current.y-next.y==-1){
+          //turn around, then move forward
+          actionSolutionToHome.add({3,0});
+          actionSolutionToHome.add({0,1});
+          dir = 2;
+        }
+        else if(current.x-next.x==1){
+          //turn right, then move forward
+          actionSolutionToHome.add({2,0});
+          actionSolutionToHome.add({0,1});
+          dir = 1;
+        }
+        else if(current.x-next.x==-1){
+          //turn left, then move forward
+          actionSolutionToHome.add({1,0});
+          actionSolutionToHome.add({0,1});
+          dir = 3;
+        }
+        break;
+        
+       case 1:
+       //go north
+        if(current.y-next.y==1){
+          actionSolutionToHome.add({1,0});
+          actionSolutionToHome.add({0,1});
+          dir=0;
+        }
+        //go south
+        else if(current.y-next.y==-1){
+          actionSolutionToHome.add({2,0});
+          actionSolutionToHome.add({0,1});
+          dir = 2;
+        }
+        //go east
+        else if(current.x-next.x==1){
+          actionSolutionToHome.add({0,1});
+          dir = 1;
+        }
+        //go west
+        else if(current.x-next.x==-1){
+          actionSolutionToHome.add({3,0});
+          actionSolutionToHome.add({0,1});
+          dir = 3;
+        }
+        break;
+        
+       case 2:
+       //go north
+        if(current.y-next.y==1){
+          actionSolutionToHome.add({3,0});
+          actionSolutionToHome.add({0,1});
+          dir=0;
+        }
+        //go south
+        else if(current.y-next.y==-1){
+          
+          actionSolutionToHome.add({0,1});
+          dir = 2;
+        }
+        //go east
+        else if(current.x-next.x==1){
+          actionSolutionToHome.add({1,0});
+          actionSolutionToHome.add({0,1});
+          dir = 1;
+        }
+        //go west
+        else if(current.x-next.x==-1){
+          actionSolutionToHome.add({2,0});
+          actionSolutionToHome.add({0,1});
+          dir = 3;
+        }
+        break; 
+        
+       case 3:
+       //go north
+        if(current.y-next.y==1){
+          actionSolutionToHome.add({2,0});
+          actionSolutionToHome.add({0,1});
+          dir=0;
+        }
+        //go south
+        else if(current.y-next.y==-1){
+          actionSolutionToHome.add({1,0});
+          actionSolutionToHome.add({0,1});
+          dir = 2;
+        }
+        //go east
+        else if(current.x-next.x==1){
+          actionSolutionToHome.add({3,0});
+          actionSolutionToHome.add({0,1});
+          dir = 1;
+        }
+        //go west
+        else if(current.x-next.x==-1){
+          actionSolutionToHome.add({0,1});
           dir = 3;
         }
         break; 
@@ -524,11 +640,14 @@ boolean getWeights(int weights []) {
     if (weights[i] == -1) count++;
   }
 
-  Serial.print("weights: ");
-    Serial.print(weights[0]);
-    Serial.print(weights[1]);
-    Serial.print(weights[2]);
-    Serial.println(weights[3]);
+    if(DEBUG1) {
+      Serial.print("weights: ");
+      Serial.print(weights[0]);
+      Serial.print(weights[1]);
+      Serial.print(weights[2]);
+      Serial.println(weights[3]);
+    }
+    
   
   if (count == 3) return true;
   else return false;
@@ -610,7 +729,7 @@ void getPossibles(boolean possibles[]) {
 // This is the speed run code, it knows a path and attempts to run the path as
 // fast as possible. This should be done as many times as time allows.
 void speedRun() {
-
+  
 }
 
 //move the motors using encoders for distance measurement
@@ -792,23 +911,23 @@ void generateMaze() {
   for (int i = 0; i < mazeSize ; i++) {
     for (int j = 0; j < mazeSize ; j++) {
       maze[i][j] = gen(i, j);
-      if (DEBUG)  Serial.print(maze[i][j]);
-      if (DEBUG)  Serial.print(", ");
+      if (DEBUG1)  Serial.print(maze[i][j]);
+      if (DEBUG1)  Serial.print(", ");
     }
-    if (DEBUG) Serial.println();
+    if (DEBUG1) Serial.println();
 
   }
-  if (DEBUG) Serial.println("-------------------");
+  if (DEBUG1) Serial.println("-------------------");
   for (int i = 0; i < mazeSize ; i++) {
     for (int j = 0; j < mazeSize ; j++) {
       if (i==0 && j==15){
         visits[i][j] = 1;
       }
       else visits[i][j] = 0;
-      if (DEBUG) Serial.print(visits[i][j]);
-      if (DEBUG) Serial.print(", ");
+      if (DEBUG1) Serial.print(visits[i][j]);
+      if (DEBUG1) Serial.print(", ");
     }
-    if (DEBUG) Serial.println();
+    if (DEBUG1) Serial.println();
   }
 }
 
