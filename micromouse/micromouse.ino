@@ -250,16 +250,18 @@ void solve() {
   }
 }
 
-void act(solution){
+void act(LinkedList<action> solution){
   //for each action in the solution, act based on the solution step
   for(int i=0; i< solution.size(); i++){
     //solution is a linked list of actions
     //an action has act, and cells. 
     //if act is 0, we need a cells value (number of cells to move forward)
     //act values: 0=forward, 1 is turnleft, 2 is turnright, 3 is turnaround
-    switch(solution.act){
+    
+    switch(solution.get(i).act){
+      
       case 0:
-        forward(solution.cells);
+        forward(solution.get(i).cells);
         break;
       case 1:
         turnLeft();
