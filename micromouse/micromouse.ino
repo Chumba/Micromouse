@@ -49,7 +49,7 @@ int posy = 15;
 char direction = 0;
 
 // Motor Speed variable
-int speed = 127;
+int speed = 90;
 
 // variables for cellSolutions
 struct cell {
@@ -66,7 +66,13 @@ LinkedList<action> actionSolutionToHome;
 
 PololuWheelEncoders enc;
 
+bool looping = false;
+
 void setup() {
+  
+  
+  attachInterrupt(digitalPinToInterrupt(buttonPin), isr, LOW);
+  
   if (DEBUG || DEBUG1) Serial.begin(9600);
   enc.init(encRA, encRB, encLA, encLB);
   pinMode(buttonPin, INPUT_PULLUP);
@@ -81,31 +87,44 @@ void setup() {
 
   //solve the maze
   solve();
-
+  
   // create the action solution for solving the maze
   translateSolve();
 
   //create the action solution for returning to start
   translateHome();
-}
-
-void loop() {
+  //printMazes();
 
   //start by going home
   act(actionSolutionToHome);
+}
+
+void loop() {
+  looping = true;
+  speedRounds();
+}
+
+void speedRounds(){
+  
 
   // wait for start signal
   waitBtn();
 
   //solve the maze with the optimized solution
   act(actionSolutionToSolve);
+  
   delay(1000);
+
+  act(actionSolutionToHome);
 }
 
 // This is the solving part of the maze, it discovers a path to the center of the maze
 void solve() {
   cell next = {0, 0};
+bool  stat = true;
   while (!isSolved()) {
+    stat=!stat;
+    digitalWrite(13, stat);
     //array of 4 cells, each cell has {x, y, gravity, visits}
     //the four cells are North, East, South, West respectively
     int cells [4][4] = {
@@ -238,13 +257,33 @@ void solve() {
           //TODO pick another direction, right or left, i dont think this could ever happen tbh
         }
       }
-      next.x = posx;
-      next.y = posy;
-      push(next);
+      
+      
+    
     }
-
+    next.x = posx;
+    next.y = posy;
+    push(next);
+    
     //we're at our destination, update visits
     visits[posx][posy]++;
+  }
+  switch (direction) {
+    case 0:
+      
+      break;
+    case 1:
+      turnLeft();
+      
+      break;
+    case 2:
+      turnAround();
+      
+      break;
+    case 3:
+      turnRight();
+      
+      break;
   }
 }
 
@@ -387,7 +426,7 @@ void goWest() {
 void translateSolve() {
   int dir = 0;
   //loops through every node of cell solution
-  for (int i = 0; i < cellSolution.size(); i++) {
+  for (int i = 0; i < cellSolution.size()-1; i++) {
     cell current = cellSolution.get(i);
     cell next = cellSolution.get(i + 1);
 
@@ -405,13 +444,13 @@ void translateSolve() {
           actionSolutionToSolve.add({0, 1});
           dir = 2;
         }
-        else if (current.x - next.x == 1) {
+        else if (current.x - next.x == -1) {
           //turn right, then move forward
           actionSolutionToSolve.add({2, 0});
           actionSolutionToSolve.add({0, 1});
           dir = 1;
         }
-        else if (current.x - next.x == -1) {
+        else if (current.x - next.x == 1) {
           //turn left, then move forward
           actionSolutionToSolve.add({1, 0});
           actionSolutionToSolve.add({0, 1});
@@ -433,12 +472,12 @@ void translateSolve() {
           dir = 2;
         }
         //go east
-        else if (current.x - next.x == 1) {
+        else if (current.x - next.x == -1) {
           actionSolutionToSolve.add({0, 1});
           dir = 1;
         }
         //go west
-        else if (current.x - next.x == -1) {
+        else if (current.x - next.x == 1) {
           actionSolutionToSolve.add({3, 0});
           actionSolutionToSolve.add({0, 1});
           dir = 3;
@@ -459,13 +498,13 @@ void translateSolve() {
           dir = 2;
         }
         //go east
-        else if (current.x - next.x == 1) {
+        else if (current.x - next.x == -1) {
           actionSolutionToSolve.add({1, 0});
           actionSolutionToSolve.add({0, 1});
           dir = 1;
         }
         //go west
-        else if (current.x - next.x == -1) {
+        else if (current.x - next.x == 1) {
           actionSolutionToSolve.add({2, 0});
           actionSolutionToSolve.add({0, 1});
           dir = 3;
@@ -486,26 +525,44 @@ void translateSolve() {
           dir = 2;
         }
         //go east
-        else if (current.x - next.x == 1) {
+        else if (current.x - next.x == -1) {
           actionSolutionToSolve.add({3, 0});
           actionSolutionToSolve.add({0, 1});
           dir = 1;
         }
         //go west
-        else if (current.x - next.x == -1) {
+        else if (current.x - next.x == 1) {
           actionSolutionToSolve.add({0, 1});
           dir = 3;
         }
         break;
     }
   }
+  //face north for simplicity's sake
+  switch(dir){
+    case 0:
+    //already facing north, shwag
+    break;
+    case 1:
+      //im facing east, gotta turn left
+      actionSolutionToSolve.add({1, 0});
+      break;
+    case 2:
+      //facing south, gotta turn arount
+      actionSolutionToSolve.add({3, 0});
+      break;
+    case 3:
+      //facing west, gotta turn right
+      actionSolutionToSolve.add({2,0});
+      break;
+      
+  }
 }
 
 void translateHome() {
   int dir = 0;
   //loops through every node of cell solution
-  // this version translates into a solution from solved to hom
-  for (int i = cellSolution.size(); i > 0; i--) {
+  for (int i = cellSolution.size()-1; i > 0 ; i--) {
     cell current = cellSolution.get(i);
     cell next = cellSolution.get(i - 1);
 
@@ -523,13 +580,13 @@ void translateHome() {
           actionSolutionToHome.add({0, 1});
           dir = 2;
         }
-        else if (current.x - next.x == 1) {
+        else if (current.x - next.x == -1) {
           //turn right, then move forward
           actionSolutionToHome.add({2, 0});
           actionSolutionToHome.add({0, 1});
           dir = 1;
         }
-        else if (current.x - next.x == -1) {
+        else if (current.x - next.x == 1) {
           //turn left, then move forward
           actionSolutionToHome.add({1, 0});
           actionSolutionToHome.add({0, 1});
@@ -551,12 +608,12 @@ void translateHome() {
           dir = 2;
         }
         //go east
-        else if (current.x - next.x == 1) {
+        else if (current.x - next.x == -1) {
           actionSolutionToHome.add({0, 1});
           dir = 1;
         }
         //go west
-        else if (current.x - next.x == -1) {
+        else if (current.x - next.x == 1) {
           actionSolutionToHome.add({3, 0});
           actionSolutionToHome.add({0, 1});
           dir = 3;
@@ -577,13 +634,13 @@ void translateHome() {
           dir = 2;
         }
         //go east
-        else if (current.x - next.x == 1) {
+        else if (current.x - next.x == -1) {
           actionSolutionToHome.add({1, 0});
           actionSolutionToHome.add({0, 1});
           dir = 1;
         }
         //go west
-        else if (current.x - next.x == -1) {
+        else if (current.x - next.x == 1) {
           actionSolutionToHome.add({2, 0});
           actionSolutionToHome.add({0, 1});
           dir = 3;
@@ -604,13 +661,13 @@ void translateHome() {
           dir = 2;
         }
         //go east
-        else if (current.x - next.x == 1) {
+        else if (current.x - next.x == -1) {
           actionSolutionToHome.add({3, 0});
           actionSolutionToHome.add({0, 1});
           dir = 1;
         }
         //go west
-        else if (current.x - next.x == -1) {
+        else if (current.x - next.x == 1) {
           actionSolutionToHome.add({0, 1});
           dir = 3;
         }
@@ -731,18 +788,30 @@ void getPossibles(boolean possibles[]) {
 //move the motors using encoders for distance measurement
 // distance right motor, distance left, speed right, speed left
 void move(int dR, int dL, int sR, int sL) {
-  while ((abs(enc.getCountsM1()) < dR) or (abs(enc.getCountsM2()) < dL)) {
-    setMotors(sR, sL);
+  if(dR<0 && dL<0){
+    while ((enc.getCountsM1() > dR) or (enc.getCountsM2() > dL)) {
+      setMotors(sR, sL);
+    }
   }
+  else{
+    while ((abs(enc.getCountsM1()) < dR) or (abs(enc.getCountsM2()) < dL)) {
+      setMotors(sR, sL);
+    }
+  }
+  
   offReset();
 }
 
 // turn the mouse around
 // also sets direction
 void turnAround() {
-  move(945, -945, -150, 100);
+  delay(300);
+  move(1120, -1120, -170, 100);
+  delay(300);
+ 
+  setMotors(0,100);
+  delay(80);
   offReset();
-  move(-30, -30, -100, -100);
   switch (direction) {
     case 0:
       direction = 2;
@@ -762,8 +831,10 @@ void turnAround() {
 // turn the mouse right
 // also sets direction
 void turnRight() {
-
-  move(400, -400, -150, 100);
+  
+  move(555, -555, -150, 100);
+  delay(300);
+  offReset();
   if (direction == 3) {
     direction = 0;
   }
@@ -776,7 +847,9 @@ void turnRight() {
 // also sets direction
 void turnLeft() {
 
-  move(-365, 365, 100, -115);
+  move(-500, 500, 100, -115);
+  delay(300);
+  offReset();
   if (direction == 0) {
     direction = 3;
   }
@@ -807,7 +880,7 @@ void forward(int cells) {
 
   int dist = 0;
 
-  while (dist < 120 * cells) {
+  while (dist < 121 * cells) {
 
     dist = ((enc.getCountsM1() / 12) + (enc.getCountsM2() / 12)) / 2;
     int vR = analogRead(IRpinR);
@@ -818,25 +891,28 @@ void forward(int cells) {
     int errR;
     int errL;
 
-    if (vF > 400) {
+    if (vF > 450) {
       offReset();
       break;
     }
 
-    if ((vL < 220) && (vR < 220)) {
+    int correctionStrength = 35;
+    if ((vL < 240) && (vR < 240)) {
       if (DEBUG) Serial.println("No walls");
       errL = enc.getCountsM2() - enc.getCountsM1();
       errR = errL;
     }
-    else if (vR < 200) {
+    else if (vR < 220) {
       if (DEBUG) Serial.println("No right wall");
-      errR = -(430 - vL);
+      errR = -(425 - vL);
       errL = 0;
+      correctionStrength = 25;
     }
-    else if (vL < 200) {
+    else if (vL < 220) {
       if (DEBUG) Serial.println("No left wall");
-      errL = -(430 - vR);
+      errL = -(425 - vR);
       errR = 0;
+      correctionStrength = 25;
     }
     else {
       if (DEBUG) Serial.println("2 walls");
@@ -844,10 +920,10 @@ void forward(int cells) {
       errR = -(430 - vL);
       errL = -(430 - vR);
     }
-
-
-    int fixedR = map(errR, -128, 128, -30, 30);
-    int fixedL = map(errL, -128, 128, -30, 30);
+    correctionStrength = 40;
+    
+    int fixedR = map(errR, -128, 128, -correctionStrength, correctionStrength);
+    int fixedL = map(errL, -128, 128, -correctionStrength, correctionStrength);
 
     setMotors(speed - fixedR, speed - fixedL);
 
@@ -872,7 +948,7 @@ void setMotors(int speedR, int speedL) {
 void offReset() {
   analogWrite(speedPinR, 0);
   analogWrite(speedPinL, 0);
-  delay(200);
+  //delay(1);
   enc.getCountsAndResetM1();
   enc.getCountsAndResetM2();
 
@@ -966,6 +1042,46 @@ void printMazes() {
       Serial.print(", ");
     }
     Serial.println();
+  }
+
+  Serial.println("--------------------");
+  Serial.println("Solution set");
+  for(int i=0; i < cellSolution.size(); i++){
+    Serial.print(i);
+    Serial.print(" ");
+    Serial.print(cellSolution.get(i).x);
+    Serial.print(" ");
+    Serial.println(cellSolution.get(i).y);
+  }
+
+  Serial.println("--------------------");
+  Serial.println("Action home set");
+  for(int i=0; i < actionSolutionToHome.size(); i++){
+    Serial.print(i);
+    Serial.print(" ");
+    Serial.print(actionSolutionToHome.get(i).act);
+    Serial.print(" ");
+    Serial.println(actionSolutionToHome.get(i).cells);
+  }
+
+  Serial.println("--------------------");
+  Serial.println("Action Solve set set");
+  for(int i=0; i < actionSolutionToSolve.size(); i++){
+    Serial.print(i);
+    Serial.print(" ");
+    Serial.print(actionSolutionToSolve.get(i).act);
+    Serial.print(" ");
+    Serial.println(actionSolutionToSolve.get(i).cells);
+  }
+}
+
+void isr(){
+  if (looping){
+    speedRounds();
+    return;
+  }
+  else{
+    return;
   }
 }
 
