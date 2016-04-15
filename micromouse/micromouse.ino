@@ -67,7 +67,7 @@ LinkedList<action> actionSolutionToHome;
 PololuWheelEncoders enc;
 
 bool looping = false;
-
+bool interrupted = false;
 void setup() {
   
   
@@ -296,7 +296,14 @@ void act(LinkedList<action> solution) {
     
     //if act is 0, we need a cells value (number of cells to move forward)
     //act values: 0=forward, 1 is turnleft, 2 is turnright, 3 is turnaround
-
+    if(interrupted){
+      digitalWrite(13, HIGH);
+      delay(300);
+      digitalWrite(13, LOW);
+      interrupted = false; 
+      speedRounds();
+      return;      
+    }
     switch (solution.get(i).act) {
       case 0:
         forward(solution.get(i).cells);
@@ -1077,7 +1084,7 @@ void printMazes() {
 
 void isr(){
   if (looping){
-    speedRounds();
+    interrupted = true;
     return;
   }
   else{
