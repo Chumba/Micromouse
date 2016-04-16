@@ -839,7 +839,7 @@ void turnAround() {
 // also sets direction
 void turnRight() {
   
-  move(555, -555, -150, 100);
+  move(555, -555, -115, 75);
   delay(300);
   offReset();
   if (direction == 3) {
@@ -854,7 +854,7 @@ void turnRight() {
 // also sets direction
 void turnLeft() {
 
-  move(-500, 500, 100, -115);
+  move(-500, 500, 75, -85);
   delay(300);
   offReset();
   if (direction == 0) {
@@ -887,7 +887,7 @@ void forward(int cells) {
 
   int dist = 0;
 
-  while (dist < 121 * cells) {
+  while (dist < 130 * cells) {
 
     dist = ((enc.getCountsM1() / 12) + (enc.getCountsM2() / 12)) / 2;
     int vR = analogRead(IRpinR);
@@ -905,6 +905,8 @@ void forward(int cells) {
 
     int correctionStrength = 35;
     if ((vL < 240) && (vR < 240)) {
+      enc.getCountsAndResetM2();
+      enc.getCountsAndResetM1();
       if (DEBUG) Serial.println("No walls");
       errL = enc.getCountsM2() - enc.getCountsM1();
       errR = errL;
@@ -927,7 +929,7 @@ void forward(int cells) {
       errR = -(430 - vL);
       errL = -(430 - vR);
     }
-    correctionStrength = 40;
+    correctionStrength = 45;
     
     int fixedR = map(errR, -128, 128, -correctionStrength, correctionStrength);
     int fixedL = map(errL, -128, 128, -correctionStrength, correctionStrength);
